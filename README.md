@@ -1,4 +1,10 @@
-# OpenMANET Firmware
+# OpenMANET Firmware — Radxa Rock 2F Port
+
+> **This is an unofficial community port of [OpenMANET](https://github.com/OpenMANET/firmware) to
+> the Radxa Rock 2F.** OpenMANET is developed and maintained by the
+> [OpenMANET project](https://openmanet.github.io/docs/). This repository adds Rock 2F (RK3528A)
+> board support on top of the official OpenMANET 24.10 firmware tree. All credit for the
+> OpenMANET platform, mesh stack, and HaLow integration goes to the original authors.
 
 A MANET (Mobile Ad-Hoc Network) is a self-forming wireless mesh where each node connects directly
 without centralized infrastructure. This technology is especially useful for search and rescue,
@@ -135,25 +141,36 @@ The image below shows SDR++ receiving HaLow beacons from the Rock 2F + Seeed WM1
 >
 > **After 2–3 reboots the system stabilizes and operates reliably.**
 
-### WM1302 HAT — Bootloop with full seating
+### WM1302 HAT — Boot issues and power requirements
 
-The WM1302 HAT was designed for Raspberry Pi. When fully seated on the Rock 2F 40-pin header it
-causes a **3.3V brownout** at boot due to the combined current draw of the MM6108, GPS module
-(L76KB), ATECC608B crypto chip, and HAT voltage regulator exceeding what the Rock 2F can supply
-during boot.
+The WM1302 HAT was designed for Raspberry Pi. Two issues were encountered when using it on the
+Rock 2F:
 
-**Additional conflicting pins:**
+**1. Insufficient USB power supply causes brownout**
 
-| Pin(s) | HAT signal | Rock 2F conflict |
-|--------|-----------|-----------------|
-| 8, 10  | GPS UART TX/RX | UART2 — NMEA data corrupts serial during boot |
-| 7      | GPS 1PPS       | UART1_TX — pulses interfere with UART1 init  |
-| 3, 5   | ATECC608B I2C  | I2C0 — crypto chip pulls the bus             |
-| 27, 28 | HAT ID EEPROM  | I2C1 — conflicts with onboard EEPROM at 0x50 |
+The board + HAT combination requires adequate current from the power supply. A USB port that
+cannot deliver sufficient current will cause a brownout and the system will fail to boot or
+reboot continuously. **Use a dedicated USB power adapter** rated for the Rock 2F's requirements —
+do not power it from a laptop USB port or a low-current charger.
 
-**Workaround:** Place tape or insulating material over pins 3, 5, 7, 8, 10, 27, 28 before seating
-the HAT. This exposes only the SPI and MM6108 GPIO control pins that the HaLow driver needs. An
-external 3.3V supply for the HAT also resolves the brownout.
+**2. HAT UART pins interfere with the boot process**
+
+Pins 8 and 10 on the 40-pin header carry NMEA data from the HAT's GPS module (L76KB) during
+boot. These pins overlap with the Rock 2F's UART2, and the GPS serial output prevents the system
+from booting correctly.
+
+**Required fix:** Cover **pins 8 and 10 only** with tape or insulating material before seating
+the HAT. This is the only pin isolation confirmed as necessary for correct boot.
+
+| Pin(s) | HAT signal | Rock 2F conflict | Action |
+|--------|-----------|-----------------|--------|
+| **8, 10** | GPS UART TX/RX | UART2 — GPS NMEA data blocks boot | **Must cover** |
+| 7      | GPS 1PPS   | UART1_TX — pulses during boot    | Precaution     |
+| 3, 5   | ATECC608B I2C | I2C0 — crypto chip on bus     | Precaution     |
+| 27, 28 | HAT ID EEPROM | I2C1 — EEPROM address conflict | Precaution     |
+
+Covering pins 7, 3, 5, 27, 28 is a recommended precaution but was not required for a successful
+boot in testing — only pins 8 and 10 are critical.
 
 ### IPv6 disabled system-wide
 
@@ -260,8 +277,18 @@ sysfs GPIO control.
 
 ## Contributing
 
-To contribute a custom package for OpenMANET, open a pull request in the
+### Upstream OpenMANET project
+
+This port is based on the official OpenMANET firmware:
+
+- **Main firmware repo**: [github.com/OpenMANET/firmware](https://github.com/OpenMANET/firmware)
+- **Packages repo**: [github.com/OpenMANET/packages](https://github.com/OpenMANET/packages)
+- **Documentation**: [openmanet.github.io/docs](https://openmanet.github.io/docs/)
+
+To contribute packages or features to the upstream OpenMANET project, open a pull request in the
 [OpenMANET Packages Repository](https://github.com/OpenMANET/packages).
 
-For Rock 2F-specific issues, please open an issue in this repository with the output of
+### Rock 2F port issues
+
+For issues specific to the Rock 2F port, open an issue in this repository with the output of
 `logread` and `dmesg` from the affected boot.
