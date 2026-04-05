@@ -1,0 +1,32 @@
+--- a/drivers/phy/rockchip/phy-rockchip-inno-usb2.c
++++ b/drivers/phy/rockchip/phy-rockchip-inno-usb2.c
+@@ -248,6 +248,7 @@
+ struct rockchip_usb2phy {
+ 	struct device	*dev;
+ 	struct regmap	*grf;
++	struct regmap	*phy_base;
+ 	struct regmap	*usbgrf;
+ 	struct clk	*clk;
+ 	struct clk	*clk480m;
+@@ -1327,6 +1328,21 @@
+ 	return ret;
+ }
+ 
++
++static int rk3528_usb2phy_tuning(struct rockchip_usb2phy *rphy)
++{
++	int ret = 0;
++
++	ret |= regmap_write(rphy->phy_base, 0x30, BIT(18) | 0x0000);
++	ret |= regmap_write(rphy->phy_base, 0x430, BIT(18) | 0x0000);
++	ret |= regmap_write(rphy->phy_base, 0x30, GENMASK(22, 20) | 0x0000);
++	ret |= regmap_write(rphy->phy_base, 0x430, GENMASK(22, 20) | 0x0000);
++	ret |= regmap_write(rphy->phy_base, 0x94, GENMASK(22, 19) | 0x0018);
++
++	return ret;
++}
++
++
+ static int rockchip_usb2phy_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;

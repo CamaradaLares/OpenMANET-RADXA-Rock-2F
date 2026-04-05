@@ -1,0 +1,25 @@
+--- a/drivers/phy/rockchip/phy-rockchip-inno-usb2.c
++++ b/drivers/phy/rockchip/phy-rockchip-inno-usb2.c
+@@ -314,6 +314,22 @@
+ 	return 0;
+ }
+ 
++static void
++rockchip_usb2phy_clk480m_clkout_ctl(struct clk_hw *hw, struct regmap **base,
++                                    const struct usb2phy_reg **clkout_ctl)
++{
++        struct rockchip_usb2phy *rphy =
++                container_of(hw, struct rockchip_usb2phy, clk480m_hw);
++
++        if (rphy->phy_cfg->clkout_ctl_phy.enable) {
++                *base = rphy->phy_base;
++                *clkout_ctl = &rphy->phy_cfg->clkout_ctl_phy;
++        } else {
++                *base = rphy->grf;
++                *clkout_ctl = &rphy->phy_cfg->clkout_ctl;
++        }
++}
++
+ static int rockchip_usb2phy_clk480m_prepare(struct clk_hw *hw)
+ {
+ 	struct rockchip_usb2phy *rphy =

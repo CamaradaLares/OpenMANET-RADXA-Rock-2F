@@ -1,0 +1,16 @@
+#!/bin/sh
+# Add wlan0 (HaLow mesh) to batman-adv when it comes up.
+# MTU 1532 = 1500 Ethernet + 32 bytes batman-adv overhead.
+[ "$ACTION" = "add" ] && [ "$INTERFACE" = "wlan0" ] && {
+    sleep 2
+    ip link set wlan0 mtu 1532 2>/dev/null
+    batctl meshif bat0 if add wlan0 2>/dev/null
+    logger -t batadv "Added wlan0 to bat0 with MTU 1532"
+}
+
+# Add bat0 to br-ahwlan bridge when batman-adv interface comes up.
+[ "$ACTION" = "add" ] && [ "$INTERFACE" = "bat0" ] && {
+    sleep 1
+    brctl addif br-ahwlan bat0 2>/dev/null
+    logger -t batadv "Added bat0 to br-ahwlan"
+}

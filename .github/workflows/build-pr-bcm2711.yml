@@ -1,0 +1,24 @@
+name: Build Firmware (PR) on bcm2711
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+    - 'boards/ekh-bcm2711/**'
+    - 'boards/common/**'
+    - 'include/kernel*'
+    - 'package/kernel/**'
+    - 'target/linux/bcm27xx/**'
+    - 'feeds.conf.default'
+
+jobs:
+  build-ekh-bcm2711:
+    name: Build ekh-bcm2711
+    uses: ./.github/workflows/build-firmware.yml
+    with:
+      board: ekh-bcm2711
+      target: bcm27xx
+      subtarget: bcm2711
+      description: "Raspberry Pi 4, CM4"

@@ -1,0 +1,13 @@
+# Power on WiFi GPIO4_A4 (GPIO4 base 0xffb20000, bit 4)
+# Rockchip v2 GPIO: DR_L register, bits 16-31=write mask, bits 0-15=data
+mw.l 0xffb20000 0x00100010
+
+# WIFI_REG_ON GPIO1_A6 (GPIO1 base 0xffaf0000, bit 6)
+mw.l 0xffaf0000 0x00400040
+
+sleep 1
+
+part uuid ${devtype} ${devnum}:2 uuid
+setenv bootargs "console=ttyS0,1500000 earlycon=uart8250,mmio32,0xff9f0000 root=PARTUUID=${uuid} rw rootwait"
+load ${devtype} ${devnum}:1 ${kernel_addr_r} kernel.img
+bootm ${kernel_addr_r}

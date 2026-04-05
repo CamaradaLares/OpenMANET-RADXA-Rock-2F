@@ -1,0 +1,44 @@
+#!/bin/sh /etc/rc.common
+# GPIO reset + ordered driver load for MM6108 (Rock 2F / Seeed WM1302 HAT)
+# START=09 ensures this runs before kmodloader processes modules.d
+#
+# IMPORTANT: morse must load BEFORE aic8800.
+# If aic8800 loads first it claims wlan0; netifd then sends a MESH_START_REQ
+# to aic8800 which it doesn't support, causing a kernel crash.
+START=09
+
+boot() {
+    # 1. Hardware reset MM6108 via GPIO 143 (GPIO4_B7, pin 11 on 40-pin header)
+    #    GPIO_ACTIVE_LOW: assert LOW to reset, release HIGH to run.
+    logger -t morsechipreset "Resetting MM6108 via GPIO 143..."
+    echo 143 > /sys/class/gpio/export 2>/dev/null
+    echo out > /sys/class/gpio/gpio143/direction 2>/dev/null
+    echo 0 > /sys/class/gpio/gpio143/value
+    sleep 1
+    echo 1 > /sys/class/gpio/gpio143/value
+    sleep 1
+
+    # 2. Load Morse HaLow driver FIRST (registers wlan0 for 802.11s mesh)
+    #    bcf_fgh100mhaamd.bin is the correct BCF for Quectel FGH100M-H PA
+    #    spi_clock_speed=10000000 required — 50 MHz causes SPI errors on HAT
+    logger -t morsechipreset "Loading morse driver..."
+    modprobe dot11ah
+    modprobe morse country=US bcf=bcf_fgh100mhaamd.bin spi_clock_speed=10000000 \
+        enable_ps=0 enable_dynamic_ps_offload=0
+    sleep 2
+
+    # 3. Load AIC8800 SECOND (gets its own interface, not wlan0)
+    logger -t morsechipreset "Loading AIC8800 driver..."
+    modprobe aic_load_fw
+    modprobe aic8800_fdrv ps_on=N dpsm=N ap_uapsd_on=N
+    sleep 3
+
+    # 4. Disable USB autosuspend to prevent AIC8800 disconnects
+    echo -1 > /sys/module/usbcore/parameters/autosuspend 2>/dev/null
+
+    logger -t morsechipreset "All drivers loaded"
+}
+
+start() {
+    boot
+}

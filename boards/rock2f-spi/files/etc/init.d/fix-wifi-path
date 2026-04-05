@@ -1,0 +1,30 @@
+#!/bin/sh /etc/rc.common
+# Fix AIC8800D80 USB path after firmware upload re-enumeration.
+#
+# The AIC8800 disconnects during firmware upload and re-enumerates on a
+# different USB bus number (usb3 vs usb4). This makes the stored UCI path
+# stale. Detect the actual path from sysfs and update UCI if it changed.
+START=18
+
+boot() {
+    sleep 3
+    for phy in /sys/class/ieee80211/phy*; do
+        devpath=$(readlink -f "$phy/device")
+        case "$devpath" in
+            *ff100000.usb*)
+                relpath=${devpath#*/platform/}
+                relpath="platform/${relpath}"
+                current=$(uci -q get wireless.radio1.path)
+                if [ "$current" != "$relpath" ]; then
+                    uci set wireless.radio1.path="$relpath"
+                    uci commit wireless
+                    logger -t fix-wifi-path "Updated radio1 path to $relpath"
+                fi
+                ;;
+        esac
+    done
+}
+
+start() {
+    boot
+}

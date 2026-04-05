@@ -1,0 +1,30 @@
+CONFIG_TARGET_MULTI_PROFILE=y
+CONFIG_TARGET_rockchip=y
+CONFIG_TARGET_rockchip_armv8=y
+CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_radxa_rock-2f=y
+
+CONFIG_VERSION_MANUFACTURER="Radxa"
+CONFIG_VERSION_PRODUCT="ROCK 2F"
+
+# Morse HaLow stack — SPI-connected MM6108 (Seeed WM1302 HAT)
+CONFIG_MORSE_SPI=y
+CONFIG_PACKAGE_kmod-morse=y
+CONFIG_PACKAGE_morse-fw-6108=y
+CONFIG_PACKAGE_morse-fw-6108-tlm=y
+CONFIG_PACKAGE_morse-board-config=y
+CONFIG_PACKAGE_morse-regdb=y
+CONFIG_PACKAGE_morsectrl=y
+CONFIG_PACKAGE_netifd-morse=y
+CONFIG_PACKAGE_hostapd_s1g=y
+CONFIG_PACKAGE_wpa_supplicant_s1g=y
+CONFIG_PACKAGE_dot11ah=y
+
+# AIC8800D80 — internal USB WiFi AP (out-of-tree driver)
+CONFIG_PACKAGE_kmod-aic8800-usb=y
+CONFIG_PACKAGE_aic8800-firmware=y
+
+# Rootfs partition size (256 MB — squashfs is ~50 MB, leaves ~200 MB for overlay)
+CONFIG_TARGET_ROOTFS_PARTSIZE=256
+
+# Disable ext4 image (squashfs only for flash savings)
+CONFIG_TARGET_ROOTFS_EXT4FS=n

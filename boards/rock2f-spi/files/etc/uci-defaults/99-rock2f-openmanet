@@ -1,0 +1,171 @@
+#!/bin/sh
+# First-boot configuration for Rock 2F OpenMANET node.
+#
+# Configures:
+#   - MM6108 HaLow radio: 802.11s mesh, 921 MHz, SAE, feeding into bat0
+#   - AIC8800 WiFi AP: 5 GHz AP on br-ahwlan (single OpenMANET bridge)
+#   - batman-adv bat0: BATMAN_V routing algorithm
+#   - br-ahwlan: single flat L2 bridge (bat0 + eth0 + WiFi AP)
+#   - Per-node DHCP: 16 leases from 10.41.X.1/16 range
+#   - Init scripts enabled, module auto-load disabled
+#   - BCF symlink fixed for Quectel FGH100M-H (PA enabled, 27 dBm)
+
+# Wait for wifi config to generate radio entries
+sleep 2
+
+# ── Radio detection ───────────────────────────────────────────────────────────
+morse_radio=""
+aic_radio=""
+for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
+    type=$(uci -q get wireless.$radio.type)
+    case "$type" in
+        morse) morse_radio="$radio" ;;
+        mac80211)
+            path=$(uci -q get wireless.$radio.path)
+            case "$path" in
+                *spi*) ;; # dot11ah mac80211 shim — skip
+                *usb*|*ff100000*) aic_radio="$radio" ;;
+            esac
+            ;;
+    esac
+done
+
+# Disable dot11ah mac80211 shim radios (SPI path) — morse driver handles these
+for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
+    type=$(uci -q get wireless.$radio.type)
+    path=$(uci -q get wireless.$radio.path)
+    if [ "$type" = "mac80211" ] && echo "$path" | grep -q 'spi'; then
+        uci set wireless.$radio.disabled='1'
+    fi
+done
+
+# ── Morse HaLow mesh radio ────────────────────────────────────────────────────
+if [ -n "$morse_radio" ]; then
+    uci set wireless.$morse_radio.disabled='0'
+    uci set wireless.$morse_radio.channel='38'
+    uci set wireless.$morse_radio.country='US'
+    uci set wireless.$morse_radio.bcf='bcf_fgh100mhaamd.bin'
+    def=$(uci show wireless | grep "device='$morse_radio'" | head -1 | cut -d. -f2 | cut -d. -f1)
+    if [ -n "$def" ]; then
+        uci set wireless.$def.mode='mesh'
+        uci set wireless.$def.network='mesh0'
+        uci set wireless.$def.ssid='OpenMANET'
+        uci set wireless.$def.mesh_id='OpenMANET'
+        uci set wireless.$def.encryption='sae'
+        uci set wireless.$def.key='openmanet123'
+        uci set wireless.$def.mesh_fwding='0'
+        uci set wireless.$def.disabled='0'
+    fi
+fi
+
+# ── AIC8800 WiFi AP ───────────────────────────────────────────────────────────
+if [ -n "$aic_radio" ]; then
+    uci set wireless.$aic_radio.disabled='0'
+    def=$(uci show wireless | grep "device='$aic_radio'" | head -1 | cut -d. -f2 | cut -d. -f1)
+    if [ -n "$def" ]; then
+        uci set wireless.$def.mode='ap'
+        uci set wireless.$def.network='ahwlan'
+        uci set wireless.$def.ssid='OpenMANET-AP'
+        uci set wireless.$def.encryption='psk2'
+        uci set wireless.$def.key='openmanet123'
+    fi
+fi
+
+# Disable any remaining unrecognised radios
+for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
+    [ "$radio" = "$morse_radio" ] && continue
+    [ "$radio" = "$aic_radio" ] && continue
+    uci set wireless.$radio.disabled='1'
+done
+
+# ── Network — OpenMANET single-bridge architecture ───────────────────────────
+#
+# br-ahwlan: flat L2 bridge containing eth0, bat0, and WiFi AP.
+#   All clients (wired, WiFi, mesh-routed) share 10.41.0.0/16.
+#
+# bat0: batman-adv L2 mesh over wlan0 (HaLow backhaul).
+#   bat0 is added to br-ahwlan via hotplug (99-batadv).
+#
+# mesh0: batman-adv hard interface for wlan0.
+
+# Remove default lan/wan configuration
+uci -q delete network.lan
+uci -q delete network.wan
+uci -q delete network.wan6
+
+# br-ahwlan bridge device — eth0 is bridged statically; bat0 added via hotplug
+uci set network.ahwlan_dev=device
+uci set network.ahwlan_dev.name='br-ahwlan'
+uci set network.ahwlan_dev.type='bridge'
+uci add_list network.ahwlan_dev.ports='eth0'
+
+# ahwlan interface on the bridge
+uci set network.ahwlan=interface
+uci set network.ahwlan.device='br-ahwlan'
+uci set network.ahwlan.proto='static'
+uci set network.ahwlan.ipaddr='10.41.254.1'
+uci set network.ahwlan.netmask='255.255.0.0'
+uci set network.ahwlan.ipv6='0'
+
+# batman-adv interface (BATMAN_V for improved link quality metrics)
+uci set network.bat0=interface
+uci set network.bat0.proto='batadv'
+uci set network.bat0.routing_algo='BATMAN_V'
+uci set network.bat0.gw_mode='off'
+uci set network.bat0.orig_interval='5000'
+
+# HaLow mesh backhaul — wlan0 is batman-adv hard interface feeding into bat0
+uci set network.mesh0=interface
+uci set network.mesh0.proto='batadv_hardif'
+uci set network.mesh0.master='bat0'
+uci set network.mesh0.mtu='1532'
+
+uci set network.globals.ula_prefix=''
+uci -q delete network.globals.ula_prefix
+
+uci commit network
+uci commit wireless
+
+# ── DHCP — per-node 16 leases from 10.41.0.0/16 ─────────────────────────────
+uci set dhcp.ahwlan=dhcp
+uci set dhcp.ahwlan.interface='ahwlan'
+uci set dhcp.ahwlan.start='2'
+uci set dhcp.ahwlan.limit='16'
+uci set dhcp.ahwlan.leasetime='12h'
+
+# Disable DHCP on default interfaces that no longer exist
+uci -q delete dhcp.lan
+uci -q set dhcp.loopback.ignore='1'
+
+uci commit dhcp
+
+# ── Firewall — minimal rules for br-ahwlan ───────────────────────────────────
+uci -q delete firewall.@zone[0]
+uci -q delete firewall.@zone[1]
+uci add firewall zone
+uci set firewall.@zone[-1].name='ahwlan'
+uci set firewall.@zone[-1].input='ACCEPT'
+uci set firewall.@zone[-1].output='ACCEPT'
+uci set firewall.@zone[-1].forward='ACCEPT'
+uci add_list firewall.@zone[-1].network='ahwlan'
+uci commit firewall
+
+# ── Init scripts ──────────────────────────────────────────────────────────────
+/etc/init.d/morsechipreset enable
+/etc/init.d/fix-wifi-path enable
+
+# ── Prevent kmodloader from auto-loading morse/AIC before GPIO reset ─────────
+# kmodloader runs before rc.d init scripts. If morse loads before GPIO reset,
+# the SPI probe fails. Rename entries to .disabled so they are skipped.
+[ -f /etc/modules.d/morse ] && mv /etc/modules.d/morse /etc/modules.d/morse.disabled
+for f in /etc/modules.d/*aic*; do
+    [ -f "$f" ] && mv "$f" "${f}.disabled"
+done
+
+# ── BCF symlink — select Quectel FGH100M-H config (PA enabled, 27 dBm) ──────
+# morse-feed ships bcf_default.bin → bcf_failsafe.bin (PA disabled, 0 dBm).
+# The Seeed WM1302 HAT uses the Quectel FGH100M-H module which needs the AMD
+# BCF to properly enable its power amplifier.
+ln -sf /lib/firmware/morse/bcf_fgh100mhaamd.bin /lib/firmware/morse/bcf_default.bin
+
+exit 0

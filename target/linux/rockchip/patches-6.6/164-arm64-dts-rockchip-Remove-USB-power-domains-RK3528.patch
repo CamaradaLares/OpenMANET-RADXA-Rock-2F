@@ -1,0 +1,34 @@
+--- a/arch/arm64/boot/dts/rockchip/rk3528.dtsi	2026-03-29 02:06:19.296635962 -0300
++++ b/arch/arm64/boot/dts/rockchip/rk3528.dtsi	2026-03-29 02:06:19.305636033 -0300
+@@ -263,7 +263,6 @@
+ 				 <&cru ACLK_USB3OTG>;
+ 			clock-names = "ref_clk", "suspend_clk", "bus_clk";
+ 			interrupts = <GIC_SPI 152 IRQ_TYPE_LEVEL_HIGH>;
+-			power-domains = <&power RK3528_PD_VPU>;
+ 			resets = <&cru SRST_A_USB3OTG>;
+ 			dr_mode = "otg";
+ 			phy_type = "utmi_wide";
+@@ -300,7 +299,6 @@
+ 			interrupts = <GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>;
+ 			phys = <&usb2phy_host>;
+ 			phy-names = "usb";
+-			power-domains = <&power RK3528_PD_VO>;
+ 			status = "disabled";
+ 		};
+ 
+@@ -312,7 +310,6 @@
+ 			interrupts = <GIC_SPI 144 IRQ_TYPE_LEVEL_HIGH>;
+ 			phys = <&usb2phy_host>;
+ 			phy-names = "usb";
+-			power-domains = <&power RK3528_PD_VO>;
+ 			status = "disabled";
+ 		};
+ 
+@@ -1157,7 +1154,6 @@
+ 			clock-names = "phyclk", "pclk";
+ 			#clock-cells = <0>;
+ 			clock-output-names = "clk_usbphy_480m";
+-			power-domains = <&power RK3528_PD_VO>;
+ 			rockchip,usbgrf = <&vo_grf>;
+ 			status = "disabled";
+ 
