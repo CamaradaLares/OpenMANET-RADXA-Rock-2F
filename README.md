@@ -172,11 +172,16 @@ the HAT. This is the only pin isolation confirmed as necessary for correct boot.
 Covering pins 7, 3, 5, 27, 28 is a recommended precaution but was not required for a successful
 boot in testing — only pins 8 and 10 are critical.
 
-### IPv6 disabled system-wide
+### IPv6 disabled on AIC8800 interface
 
-The AIC8800D80 driver crashes in atomic context when IPv6 MLD multicast packets trigger its mesh
-proxy code. IPv6 is disabled at the kernel level (`sysctl`) as a workaround. This affects all
-interfaces, not just WiFi.
+The AIC8800D80 driver has a bug in `rwnx_send_mesh_proxy_add_req()` — it calls
+`wait_event_timeout()` from atomic context when the interface is in mesh point mode, triggered by
+IPv6 MLD multicast packets. This causes a `scheduling while atomic` kernel BUG.
+
+In the OpenMANET configuration the AIC8800 operates in **AP mode only**, so the crash path is not
+reached under normal operation. As a precaution, IPv6 is disabled specifically on the AIC8800
+interface (`phy1-ap0`) via sysctl. IPv6 remains enabled on all other interfaces (bat0, eth0,
+loopback) so that mesh services function correctly.
 
 ### HaLow frequency shown as 5 GHz in system tools
 
