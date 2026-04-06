@@ -1,0 +1,14 @@
+--- a/feeds/openmanet/drivers/morse_driver/Makefile
++++ b/feeds/openmanet/drivers/morse_driver/Makefile
+@@ -115,6 +115,11 @@
+
+ NOSTDINC_FLAGS += -DMORSE_TRACE_PATH=.
+
++# SPI_CONTROLLER_ENABLE_CS_GPIOD was added in kernel 6.9. Define it for
++# older kernels so the morse SPI driver compiles without -Werror=cpp failure.
++# BIT(9) is unused in 6.6 SPI core so setting it is harmless.
++NOSTDINC_FLAGS += -DSPI_CONTROLLER_ENABLE_CS_GPIOD='(1<<9)'
++
+ include $(INCLUDE_DIR)/kernel-defaults.mk
+
+ define Build/Compile
