@@ -1,0 +1,59 @@
+--- a/feeds/openmanet/openmanetd/Makefile
++++ b/feeds/openmanet/openmanetd/Makefile
+@@ -12,7 +12,7 @@
+ PKG_LICENSE:=MIT
+ PKG_MAINTAINER:=Corey Wagehoft
+ 
+-PKG_BUILD_DEPENDS:=golang/host
++PKG_BUILD_DEPENDS:=golang/host libnl
+ PKG_BUILD_PARALLEL:=1
+ PKG_BUILD_FLAGS:=no-mips16 gc-sections lto
+ 
+@@ -22,6 +22,11 @@
+ include $(INCLUDE_DIR)/package.mk
+ include ../lang/golang/golang-package.mk
+ 
++# tailscale.com v1.94.2 (direct dep) requires go >= 1.25.5 but the OpenWrt
++# feeds ship Go 1.23. Override GOTOOLCHAIN so Go auto-downloads the required
++# toolchain instead of refusing to build.
++GO_PKG_BUILD_VARS += GOTOOLCHAIN=auto
++
+ # Explicit runtime deps (correct OpenWrt syntax)
+ RDEPENDS:$(PKG_NAME) += libopusfile
+ 
+@@ -41,15 +46,32 @@
+ endef
+ 
+ define Build/Configure
++	# The OpenMANET golang fork sets GO_DEFAULT_VERSION:=1.25 and builds PATH as
++	# go-$(GO_HOST_VERSION)/bin. The standard OpenWrt golang package installs as
++	# go-cross. Create a symlink so the PATH resolves to the correct Go binary.
++	test -e "$(STAGING_DIR_HOSTPKG)/lib/go-1.25" || \
++		ln -sfn "$(STAGING_DIR_HOSTPKG)/lib/go-cross" "$(STAGING_DIR_HOSTPKG)/lib/go-1.25"
+ 	# Compile Alfred Bindings
+-	$(MAKE) -C $(PKG_BUILD_DIR)/internal/alfred/alfred
++	# Note: CFLAGS must include libnl3 path directly — alfred's Makefile does
++	# "CFLAGS += $(LIBNL_CFLAGS)" which has no effect when CFLAGS is a
++	# command-line variable (command-line vars take precedence in GNU make).
++	# We also pass LIBNL_CFLAGS/LDLIBS to prevent alfred from calling pkg-config.
++	$(MAKE) -C $(PKG_BUILD_DIR)/internal/alfred/alfred \
++		CC="$(TARGET_CC)" \
++		CFLAGS="$(TARGET_CFLAGS) -I$(STAGING_DIR)/usr/include/libnl3" \
++		LDFLAGS="$(TARGET_LDFLAGS)" \
++		LIBNL_CFLAGS="-I$(STAGING_DIR)/usr/include/libnl3" \
++		LIBNL_LDLIBS="-L$(STAGING_DIR)/usr/lib -lnl-3" \
++		LIBNL_GENL_CFLAGS="-I$(STAGING_DIR)/usr/include/libnl3" \
++		LIBNL_GENL_LDLIBS="-L$(STAGING_DIR)/usr/lib -lnl-genl-3" \
++		CONFIG_ALFRED_CAPABILITIES=n
+ 	$(call GoPackage/Build/Configure,$(1))
+ 	$(call Build/Configure/Default,$(1))
+ endef
+ 
+ MAKE_FLAGS += \
+-	LIBNL_NAME="libnl-tiny" \
+-	LIBNL_GENL_NAME="libnl-tiny" \
++	LIBNL_NAME="libnl-3.0" \
++	LIBNL_GENL_NAME="libnl-genl-3.0" \
+ 
+ define Package/openmanetd/conffiles
+ /etc/openmanetd/

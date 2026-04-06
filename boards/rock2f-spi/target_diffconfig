@@ -28,3 +28,6 @@ CONFIG_TARGET_ROOTFS_PARTSIZE=256
 
 # Disable ext4 image (squashfs only for flash savings)
 CONFIG_TARGET_ROOTFS_EXT4FS=n
+
+# OpenMANET management daemon
+CONFIG_PACKAGE_openmanetd=y

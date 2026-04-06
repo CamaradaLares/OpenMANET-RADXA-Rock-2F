@@ -25,7 +25,7 @@ links.
 | Raspberry Pi CM4  | ✅ Stable      | ✅ Working (SPI)    | Onboard WiFi in AP mode only                       |
 | Raspberry Pi 3B   | ✅ Stable      | ✅ Working (SPI)    | Onboard WiFi in AP mode only                       |
 | Raspberry Pi 2W   | ✅ Stable      | ✅ Working (SPI)    | Onboard WiFi in AP mode only                       |
-| **Radxa Rock 2F** | ⚠️ Beta        | ✅ Working (USB)    | AIC8800D80 onboard WiFi. See Rock 2F section below |
+| **Radxa Rock 2F** | ⚠️ Beta        | ✅ Working (USB)    | AIC8800D80 onboard WiFi. GPS not available (UART conflict). See Rock 2F section below |
 
 ### HaLow Radio Modules
 
@@ -93,6 +93,7 @@ same 40-pin GPIO header as Raspberry Pi, which allows the Seeed WM1302 HaLow HAT
 | Onboard WiFi    | AIC8800D80 — USB 2.0 via internal FE1.1s USB hub                     |
 | Serial console  | UART0 at `0xff9f0000`, 1500000 baud 8N1 (pins 8/10 on header)        |
 | Storage         | Boot from microSD                                                    |
+| GPS             | Not available — UART0 (serial console) conflicts with HAT GPS output  |
 
 ### Flashing
 
@@ -171,6 +172,16 @@ the HAT. This is the only pin isolation confirmed as necessary for correct boot.
 
 Covering pins 7, 3, 5, 27, 28 is a recommended precaution but was not required for a successful
 boot in testing — only pins 8 and 10 are critical.
+
+### GPS not available — UART console conflict
+
+The Rock 2F serial console (UART0) uses the same pins (8/10 on the 40-pin header) that would
+be required to receive NMEA data from the WM1302 HAT's onboard L76KB GPS module. The console
+must remain active for system access, so GPS cannot be used at the same time.
+
+The `gpsd` package is included in the image as a dependency of `openmanetd`, but the GPS
+daemon will not produce position data on this hardware configuration. GPS support would require
+either a dedicated USB GPS receiver or a hardware modification to redirect UART0.
 
 ### IPv6 disabled on AIC8800 interface
 
@@ -251,6 +262,28 @@ applies the 802.11s mesh config to `wlan0`, the AIC8800 receives a `MESH_START_R
 support, triggering a `scheduling while atomic` kernel BUG. The morse driver must always load
 first. OpenWrt's `kmodloader` was bypassed with a custom `START=09` init script.
 
+### 9. openmanetd cross-compilation failures
+
+Compiling openmanetd for aarch64-musl required solving two independent issues:
+
+**alfred C bindings:** The upstream `openmanetd` Makefile invokes alfred's sub-Makefile without
+cross-compile flags, causing it to build with the host compiler and fail to find libnl3 headers.
+Additionally, alfred's Makefile uses `CFLAGS += $(LIBNL_CFLAGS)` which has no effect when
+`CFLAGS` is also a command-line variable (GNU make command-line variables take precedence over
+`+=` assignments in the sub-Makefile). Fixed by embedding the libnl3 include path directly in
+the `CFLAGS` command-line variable and passing all cross-compiler flags explicitly.
+
+**Go toolchain version mismatch:** `openmanetd v1.2.28` depends on `tailscale.com v1.94.2`
+which requires Go >= 1.25.5. The OpenWrt 24.10 feeds ship Go 1.23. With `GOTOOLCHAIN=local`
+(the OpenWrt default) Go 1.23 refuses to build the package. Fixed by setting
+`GOTOOLCHAIN=auto` in the package Makefile, allowing Go to automatically download and use
+Go 1.25.5 for this package only, without upgrading the system-wide Go toolchain.
+
+A secondary issue: the OpenMANET golang feed fork sets `GO_DEFAULT_VERSION:=1.25` and adds
+`staging_dir/hostpkg/lib/go-1.25/bin` to PATH, but the standard OpenWrt golang package
+installs as `go-cross`. A symlink `go-1.25 → go-cross` is auto-created during the
+`Build/Configure` step to bridge this mismatch.
+
 ### 8. chipreset.sh incompatible with RK3528
 
 The morse-feed's `chipreset.sh` script uses `gpiofind MM_RESET` to locate the reset GPIO by
@@ -269,12 +302,14 @@ sysfs GPIO control.
 - [ ] Add `gpio-line-names` to RK3528 GPIO4 device tree so the upstream morse `chipreset.sh`
   works natively without the custom sysfs workaround.
 - [ ] Fix AIC8800 driver IPv6 atomic context crash to re-enable IPv6.
-- [ ] Compile and integrate `openmanetd` — the Go daemon for automatic mesh IP addressing,
-  gateway discovery, and Alfred node sync. Currently blocked by Go build dependencies.
+- [x] ~~Compile and integrate `openmanetd`~~ — **done.** alfred bindings and Go 1.25.5 toolchain
+  issues resolved. `openmanetd v1.2.28` builds and is included in the image.
+- [ ] Validate `openmanetd` runtime behaviour on the Rock 2F — mesh IP addressing, gateway
+  discovery, and Alfred node sync have not yet been tested on this hardware.
 - [ ] Switch from BATMAN_IV to BATMAN_V for improved link quality metrics and gateway selection.
 - [ ] Investigate and fix AIC8800 WiFi AP periodic ~500ms latency spikes.
-- [ ] Add GPS integration using the WM1302 HAT's onboard L76KB module (requires HAT pin
-  isolation to avoid UART conflicts).
+- [ ] GPS support — the WM1302 HAT's L76KB GPS module cannot be used while the serial console
+  is active on UART0. Requires a dedicated USB GPS receiver or hardware modification.
 - [ ] Upstream RK3528A BSP patches to OpenWrt mainline.
 - [ ] Test multi-node mesh with 2+ Rock 2F boards — validate batman-adv routing and throughput.
 
